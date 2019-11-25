@@ -14,48 +14,49 @@
 # only the records matching the selection filter will be processd in Powershell => Less overhead => better performance 
 
 # Initialize stuff
-
+$new_Loc = $true
 $Def_GW =""
 $loc_last = ""
 $loc_now = ""
-# Pathes 
+
+# definition of files needed. Looks cumbersome to begin with, but allows for flexibility in naming them...
 $work_path = $home+'\loc_check\'
 $log = "log.txt"
 $known_mac = "known_mac.txt"
 $last_location = "Last_location.txt"
 
-#combined path+file
+# combined path+file
 $w_log = $work_path+$log
 $w_known_mac = $work_path+$known_mac
 $w_last_location = $work_path+$last_location
 
-# Check if working path exists, if not create it and the needed Files
+# function for timestamp in Logs etc
+function NOW {Get-Date -Format "dd.MM.yyyy @ HH:mm:ss:fff"}
 
-function NOW {
-        Get-Date -Format "dd.MM.yyyy @ HH:mm:ss:fff"
+# Check if working path and files exist, if not create 
+
+if(-not (Test-Path $work_path)) { New-Item -Path $work_path -ItemType Directory}
+if(-not (Test-Path $w_log))     { New-Item -Path $w_log -ItemType "file"
+        (now)+" Logfile initialized" | Add-Content -Path $w_log
 }
-
-
-if(-not (Test-Path $work_path)) {
-        New-Item -Path $work_path       -ItemType Directory
-        New-Item -Path $w_log           -ItemType "file"
-        New-Item -Path $w_known_mac     -ItemType "file"
-        New-Item -Path $w_last_location -ItemType "file"
-        (now)+" Logfile initialized" | Out-File $w_log 
-#add more as needed
+if(-not (Test-Path $w_last_location)) { New-Item -Path $w_last_location -ItemType "file"
+        #"none" | Add-Content -Path $w_last_location
 }
+if(-not (Test-Path $w_known_mac)){ New-Item -Path $w_known_mac -ItemType "file"}
 
+# read last location
 
-(NOW)+" **************** new scan ******************" | Out-File $w_log -Append
-# Identify Adapters that are 'up' => will also return Adapters from virtual environments     
+$loc_last = Get-Content $w_last_location
+
+# confirm new scan to log file
+(NOW)+" **************** new scan ******************" | Add-Content -Path $w_log
+
+# Identify Adapters that are 'up' => will also return Adapters from virtual environments
 $Adapters = (Get-NetAdapter | Where-Object {$_.Status -like "up"}).ifIndex
 # filter for adapters which point to def-gw => "0.0.0.0"
 foreach ($Adapter in $Adapters) {
         $Def_GW = (Get-WmiObject -Class Win32_IP4RouteTable -filter "destination='0.0.0.0' and mask='0.0.0.0' and InterfaceIndex=$adapter").nexthop
-        IF ($Def_GW) {
-                (NOW)+" Found default gateway: "+$Def_GW +" on Adapter: "+$Adapter | Out-File $w_log -Append
-                break
-        }
+        if ($Def_GW) { break }
 }
 # use arp to get the local IP, the MAC and the IP from the default gateway 
 foreach ($line in (arp.exe -a $Def_GW)) {
@@ -66,50 +67,31 @@ foreach ($line in (arp.exe -a $Def_GW)) {
             break
         }
 }
-#Write-Host "This is what I recognize: "
-#Write-Host "Using Adapter:" $Adapter "with IP:" $lcl_IP "we talk to a Gatway with MAC:" $MAC "and IP:" $GWIP
-(now)+" This is what I recognize: " | Out-File $w_log -Append
-(now)+" Using Adapter: "+$Adapter+" with IP: "+$lcl_IP+" we talk to a Gatway with MAC: "+$MAC+" and IP: "+$GWIP | Out-File $w_log -Append
-                
+(now)+" This is what I recognize: Adapter:"+$Adapter+" My IP:"+$lcl_IP+" GW MAC:"+$MAC+" GW IP:"+$GWIP | Add-Content -Path $w_log
 
-# Identify location based on MAC of default gateway, add your known macs here as a part of the switch 
-switch ($MAC) {
-        "b8-af-67-f4-fb-2d"     { $loc_now = "Office"}
-        "f0-9f-c2-11-60-a1"     { $loc_now = "Home" }
-        # if we cannot identify the network...
-        default { $loc_now = "nope" }                
-}
+# read list of known macs
+$MACs = Get-Content $w_known_mac
 
-
-<#}
-switch ($MAC) {# add your known macs here as a part of the switch 
-        "b8-af-67-f4-fb-2d"     {
-                                (now)+ " Looks like Office" | Out-File $w_log -Append;
-                                # do stuff here like set RDP Permission OFF;
-                                Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value '1'
-                                # now let's check if we set it properly
-                                if((Get-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server').fDenyTSConnections -eq "1") 
-                                        {(NOW)+" Remote Desktop is disabled." | Out-File $w_log -Append }
-                                else {(NOW)+"!! Remote Desktop is still enabled !!" | Out-File $w_log -Append
-                                write-host "Check log here:" $w_log }
-                                }
-        "22-4d-a8-4c-96-02"     {
-                Write-Host "Looks like your on the way to somewhere using your Nokia Wireless, Caution"
-                # things like Screen brightness or similar
+foreach ($MAC_read in $MACs) {
+        if($MAC_read.Split("")[0] -eq $MAC) {
+                $loc_now = $MAC_read.Split("")[1]
+                $new_Loc = $false
+                break
         }
-        "56-30-44-8f-e2-12"     {
-                Write-Host "Looks like your on the way to somewhere using your Nokia USB tethering, nice !"
-                # things like Screen brightness or similar
 }
-        "f0-9f-c2-11-60-a1"     {
-                                (NOW)+" Looks like Home" | Out-File $w_log -Append;
-                                # do stuff here like set RDP Permission ON;
-                                Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name 'fDenyTSConnections' -Value '0'
-                                $loc_now = "Home" 
-        }
-        # if we cannot identify the network...
-        default {(NOW)+" not sure which network we are on right now. The MAC of the default GW is: "+$MAC | Out-File $w_log -Append
-                $loc_now = "location not identified" 
-        }                
+
+if ($new_Loc){
+        (NOW)+" Did not recognise this location. Requesting a name:" | Add-Content -Path $w_log
+        Write-Host "What I see:`nUsing Adapter:" $Adapter "with IP:" $lcl_IP "we talk to a Gatway with MAC:" $MAC "and IP:" $GWIP "`nLooks like a new location.`n"        
+        $loc_now = read-Host "How do you want to name this location?"
+        $MAC+" "+$loc_now | Add-Content -Path $w_known_mac
+        (NOW)+" Added "+$MAC+" with Name: "+$loc_now+" to File known_mac.txt." | Add-Content -Path $w_log
 }
-#>
+
+if ($loc_now -eq $loc_last){
+        (now)+" "+$loc_now+": Same location as before, exiting." | Add-Content -Path $w_log
+        break
+} else {
+        (now)+" Location has changed to "+$loc_now+", applying settings." | Add-Content -Path $w_log
+        $loc_now | Set-Content -Path $w_last_location   
+}
