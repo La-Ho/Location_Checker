@@ -5,7 +5,8 @@
         LHO 2019-11-20 V0.3 Multiple ansewrs for defaultgateway => stronger selection
         LHO 2019-11-20 V0.4 Creating directory and files on first run. Writing to log file
         LHo 2019-11-25 V0.5 finetuned write to file, identifiy location from stored information 
-        LHo 2019-11-26 V0.6 minor glitches fixed 
+        LHO 2019-11-26 V0.6 minor glitches fixed 
+        LHO 2019-11-26 V1.0 Final Version for local use only. 
 #>
 
 # Get-wmi Info and select nexthop ... most of the times being the default gateway => needs to vaildated in different environments
@@ -85,9 +86,9 @@ if ($loc_now -eq $loc_last){
 }
 
 if ($is_new_Loc){
-        (NOW)+" Did not recognise this location. Requesting a name:" | Add-Content -Path $w_log
+        (NOW)+" Did not recognize this location. Requesting a name:" | Add-Content -Path $w_log
         Write-Host "What I see:`nUsing Adapter:" $Adapter "with IP:" $lcl_IP "we talk to a Gatway with MAC:" $MAC "and IP:" $GWIP "`nLooks like a new location.`n"        
-        $loc_now = (read-Host "How do you want to name this location?").ToLower()
+        $loc_now = (read-Host "How do you want to name this location?").ToLower().Trim()
         # writing new Mac and location name to file
         $MAC+" "+$loc_now | Add-Content -Path $w_known_mac
         (NOW)+" Added "+$MAC+" with Name: "+$loc_now+" to File known_mac.txt." | Add-Content -Path $w_log
