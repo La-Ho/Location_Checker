@@ -21,7 +21,7 @@ $Def_GW =""
 $loc_last = ""
 $loc_now = ""
 
-# definition of files needed. Looks cumbersome to begin with, but allows for flexibility in naming them...
+# definition of files needed. Looks cumbersome to begin with, but allows for flexibility in renaming them...
 $work_path = $home+'\loc_check\'
 $log = "log.txt"
 $known_mac = "known_mac.txt"
